@@ -2,18 +2,11 @@ A  ORG $0C00
 SETGR EQU $FB40
 H2 EQU $2C
 V2 EQU $2D
-MASK EQU $2E
-MASK2 EQU $4D
 PLOT EQU $F800 ; Plot point Y,A
 HLINE EQU $F819 ; plot Hline Y,A to H2,A
 VLINE EQU $F828 ; plot Vline Y,A to Y,V2
 HOME EQU $FC58
 UP EQU $FC1A
-GBASL EQU $26
-GBASH EQU $27
-TGBASL EQU $4A
-TGBASH EQU $4B
-GBASCALC EQU $F847
 RNDL EQU $4E ; Random number
 SETCOL EQU $F864
 SCRN EQU $F871 ; read color at Y,A
@@ -45,10 +38,9 @@ MainLoop
 CounterTick JSR ResetCounter
   JSR ShowScore
   JSR MoveShapeDown
-  LDA CollisionCol ; Check if we've hit an
+  LDA CollisionCol ; Check if we've hit anything
   BEQ MainLoop ; No collision, rejoin loop
-  JMP Collision ; deal with collision
-
+  
 Collision ; hit floor or other shape
   LDA ShapePos + 1 ; check YPos not at top
   CMP #02
@@ -445,10 +437,10 @@ SetBorder
   STA H2
   RTS
   
-PrintHex JSR PRBYTE
-  LDA #$A0
-  JSR COUT
-  RTS
+;PrintHex JSR PRBYTE
+;  LDA #$A0
+;  JSR COUT
+;  RTS
 PrintDec 
   CLC
   ADC #$B0
@@ -509,7 +501,7 @@ ShapePos DS 08 ;
 TempX DS 1
 TempY DS 1
 Scratch DS 1
-CollisionCol DS 1
+CollisionCol DS 1 ; colour of last collision check
 BoundryColor DB #013
 HighlightColor DB #$0E
 BoardWidth DB #12
