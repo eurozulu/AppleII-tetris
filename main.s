@@ -115,47 +115,69 @@ PauseGame
          JSR   HOME
          RTS
 MoveDown
-         JSR   WipeShape
          INC   YPos       ; Move the shape one square down
-         JSR   UpdatePos
-         JSR   ColDetect  ; get colour of next square
+         JSR   `
          BEQ   moveDone   ; If black, no collision
          DEC   YPos       ; revert move
          JSR   UpdatePos
+         JSR   DrawShape
          JMP   moveDone
 MoveLeft
-         JSR   WipeShape
          DEC   XPos       ; Move the shape one square down
-         JSR   UpdatePos
-         JSR   ColDetect  ; get colour of next square
+         JSR   MoveShape
          BEQ   moveDone   ; If black, move ok
          INC   XPos       ; revert move
          JSR   UpdatePos
+         JSR   DrawShape
          JMP   moveDone
 MoveRight
-         JSR   WipeShape
-         INC   XPos       ; Move the shape one square down
-         JSR   UpdatePos
-         JSR   ColDetect  ; get colour of next square
+         INC   XPos       ; Move the shape one square to right
+         JSR   MoveShape
          BEQ   moveDone   ; If black, move ok
          DEC   XPos       ; revert move
          JSR   UpdatePos
-moveDone JSR   DrawShape
-         RTS
-RotLeft
-         DEC   Rotation
-         BPL   KeyDone
-         LDY   #03        ; from zero to 3
-         STY   Rotation
-         JMP   KeyDone
-RotRight LDY   Rotation
+         JSR   DrawShape  ; redraw in old position
+moveDone RTS
+
+
+RotLeft  JSR   DecRot
+         JSR   MoveShape
+         BEQ   moveDone
+         JSR   IncRot     ; revert rotation
+         JSR   UpdatePos
+         JSR   DrawShape
+         JMP   moveDone
+
+RotRight JSR   IncRot
+         JSR   MoveShape
+         BEQ   moveDone
+         JSR   DecRot
+         JSR   UpdatePos
+         JSR   DrawShape
+         JMP   moveDone
+
+MoveShape JSR  WipeShape  ; Wipe in current position
+         JSR   UpdatePos  ; pick up new state
+         JSR   ColDetect
+         BNE   msDone     ; non black = collision, abort
+         JSR   DrawShape  ; redraw in new position
+         LDA   #00        ; return zero = OK
+msDone   RTS
+
+IncRot   LDY   Rotation
          CPY   #03
-         BCC   RotRightDone
+         BCC   incRDone
          LDY   #$FF       ; Rolling over 03->0
-RotRightDone
-         INY
+incRDone INY
          STY   Rotation
-         JMP   KeyDone
+         RTS
+
+DecRot   DEC   Rotation
+         BPL   decRDone
+         LDY   #03        ;;roll over0 > 3
+         STY   Rotation
+decRDone RTS
+
 ColDetect LDX  #00        ; check each block for black
 ColLoop  LDY   ShapePos,x ; load Y with relative XPos
          INX
@@ -306,37 +328,46 @@ lineChkLoop TXA
          BCC   lineChkLoop
 lineChkDone
          RTS
+
 DelHighlight
          LDX   V2
-dhlLoop  DEX              ; skip border
-         TXA
-         BEQ   dhlDone
+         DEX              ; skip border
+dhlLoop  TXA
          LDY   H1         ; look for highlight colour
          INY              ;skip border
          JSR   SCRN
-         CMP   HighltCol
-         BNE   dhlLoop
-         STX   Scratch
+         CMP   HighltCol  ; Check if its highlight colour
+         BNE   noHL
          JSR   ScrollLine
-         LDX   Scratch
          JMP   dhlLoop
+noHL     DEX
+         BNE   dhlLoop
 dhlDone  RTS
-ScrollLine JSR CopyLine
+
+ScrollLine TXA            ;Preserve X
+         PHA
+scrlLoop
+         JSR   CopyLine
          DEX
-         BNE   ScrollLine
+         BNE   scrlLoop
+         PLA              ; restore x
+         TAX
          RTS
-CopyLine LDY   H1
+
+CopyLine LDY   H1         ; Copy line at X-1, into X
 cpyLoop  INY
          CPY   H2
          BCS   cpyDone
+         DEX              ; Check line above color
          TXA
-         SBC   #01        ; line above
          JSR   SCRN
          JSR   SETCOL
+         INX
          TXA
          JSR   PLOT
          JMP   cpyLoop
 cpyDone  RTS
+
 HighlightLine             ; highligh line in A
          TAX
          LDA   HighltCol
@@ -470,7 +501,7 @@ HighltCol DB   #$0E
 BoardWidth DB  #12
 BoardHeight DB #39
 EscKey   DB    #$1B
-SzScore  ASC   "         Score: "
+SzScore  ASC   "               Score: "
          DB    0
 SzHitKey asc   "         Hit a Key to resume"
          DB    0
