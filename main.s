@@ -1,5 +1,6 @@
          ORG   $0C00
 SETGR    EQU   $FB40
+SETTXT   EQU   $FB39
 H2       EQU   $2C
 V2       EQU   $2D
 PLOT     EQU   $F800      ; Plot point Y,A
@@ -13,13 +14,13 @@ SCRN     EQU   $F871      ; read color at Y,A
 KEYB     EQU   $C000      ; read kybd char
 STROBE   EQU   $C010      ; reset keybd char
 COUT     EQU   $FDED
-LINPRT   EQU   $ED24
+LINPRT   EQU   $ED24      ;Prints A/X as H/L bytes of decimal number
 CROUT    EQU   $FD8E
 WAIT     EQU   $FCA8
 PRBYTE   EQU   $FDDA
 KEYIN    EQU   $FD28
-Start    JSR   ResetScore
-         JSR   SetScreen
+
+Start    JSR   InitGame
          JSR   ResetCounter
          JSR   ResetShape ; Sets new shape to top of the screen
 MainLoop JSR   IncCounter
@@ -116,7 +117,7 @@ PauseGame
          RTS
 MoveDown
          INC   YPos       ; Move the shape one square down
-         JSR   `
+         JSR   MoveShape
          BEQ   moveDone   ; If black, no collision
          DEC   YPos       ; revert move
          JSR   UpdatePos
@@ -226,12 +227,16 @@ ResetShape                ; Select new shape and place at top of screen
          STA   YPos
          LDA   #00
          STA   Rotation   ; zero rotation
+
+         JSR   HOME
          LDA   RNDL       ; select "random" shape
-         AND   #06
+         LDY   #07        ; a total of 7 shapes
+         JSR   ModA
          JSR   CalcSHOffset
          STA   ShapeOffset
          LDA   RNDL       ; set random color
-         AND   #11
+         LDY   #11
+         JSR   ModA
          ADC   #01        ; never black
          STA   ShapeCol
          JSR   UpdatePos
@@ -289,6 +294,7 @@ sosLoop  CPX   #00
          DEX
          JMP   sosLoop
 sosDone  RTS
+
 CheckLines LDA #00
          STA   Scratch    ; completed line count
          JSR   ShapeBounds ; Checks lines shape is on.
@@ -411,11 +417,15 @@ AddScore CLC
 noRoll
          STA   Score
          RTS
-SetScreen JSR  SETGR
+InitGame
+         JSR   SelectLevel
+         JSR   SETGR
          JSR   HOME
          JSR   SetBorder
          JSR   DrawBoundry
+         JSR   ResetScore
          RTS
+
 DrawBoundry
          LDA   BoundryCol ; Set boundry colour
          JSR   SETCOL
@@ -443,9 +453,53 @@ SetBorder
          STA   H2
          RTS
 
-PrintHex JSR PRBYTE
-         LDA #$A0
-         JSR COUT
+
+SelectLevel
+         JSR   SETTXT
+         LDA   LvlEasy
+         STA   Level
+slLoop   JSR   HOME
+         JSR   ShowLevels
+         JSR   KEYIN
+         CMP   #$8D       ; Enter
+         BEQ   slDone
+         CMP   #$8B       ;Down arrow
+         BEQ   decLevel
+         CMP   #$8A       ;Up Arrow
+         BEQ   incLevel
+         JMP   slLoop
+slDone   RTS
+
+incLevel
+         LDA   Level
+         CMP   LvlEasy
+         BEQ   setMed
+         CMP   LvlMed
+         BEQ   setHard
+         CMP   LvlHard
+         JMP   setHard
+decLevel LDA   Level
+         CMP   LvlHard
+         BEQ   setMed
+         CMP   LvlMed
+         BEQ   setEasy
+         JMP   setEasy
+
+setEasy  LDA   LvlEasy
+         STA   Level
+         JMP   slLoop
+setMed   LDA   LvlMed
+         STA   Level
+         JMP   slLoop
+setHard  LDA   LvlHard
+         STA   Level
+         JMP   slLoop
+
+PrintHex PHA
+         JSR   PRBYTE
+         LDA   #$A0
+         JSR   COUT
+         PLA
          RTS
 
 ShowScore JSR  UP
@@ -461,6 +515,10 @@ scoreDone
          LDA   Score,x
          LDX   Score
          JSR   LINPRT
+         LDA   #$A0
+         JSR   COUT
+         LDA   Level
+         JSR   PrintHex
          JSR   CROUT
          RTS
 ShowBye  LDX   #00
@@ -479,7 +537,71 @@ hitkeyLoop LDA SzHitKey,x
          JMP   hitkeyLoop
 hitkeyDone JSR CROUT
          RTS
-Level    DB    #8         ; performance limiter
+
+ShowLevels
+         LDX   #00
+shlvLoop LDA   SzSelLvl,x
+         BEQ   shlvDone
+         JSR   COUT
+         INX
+         JMP   shlvLoop
+shlvDone JSR   CROUT
+         JSR   CROUT
+         JSR   CROUT
+         JSR   shLvlEasy
+         JSR   CROUT
+         JSR   shLvlMed
+         JSR   CROUT
+         JSR   shLvlHard
+         RTS
+
+shLvlEasy LDY  Level
+         LDX   #00
+svlEloop LDA   SzLvlE,x
+         BEQ   svlDone
+         CPY   LvlEasy
+         BNE   noESel
+         AND   #$3F
+noESel   JSR   COUT
+         INX
+         JMP   svlEloop
+
+shLvlMed LDY   Level
+         LDX   #00
+svlMloop LDA   SzLvlM,x
+         BEQ   svlDone
+         CPY   LvlMed
+         BNE   noMSel
+         AND   #$3F
+noMSel   JSR   COUT
+         INX
+         JMP   svlMloop
+
+shLvlHard LDY  Level
+         LDX   #00
+svlHloop LDA   SzLvlH,x
+         BEQ   svlDone
+         CPY   LvlHard
+         BNE   noHSel
+         AND   #$3F
+noHSel   JSR   COUT
+         INX
+         JMP   svlHloop
+svlDone  RTS
+
+ModA     STY   Scratch
+modLoop  CMP   Scratch
+         BCC   modDone
+         SEC
+         SBC   Scratch
+         JMP   modLoop
+modDone  RTS
+
+LvlHard  DB    #2
+LvlMed   DB    #9
+LvlEasy  DB    #18
+
+Level    DS    1          ; selected level
 Score    DS    2          ; 16-bit score count
 H1       DS    1          ; Left side of screen
                           ; Shape State, Position,Rotation
@@ -501,6 +623,16 @@ HighltCol DB   #$0E
 BoardWidth DB  #12
 BoardHeight DB #39
 EscKey   DB    #$1B
+
+SzSelLvl ASC   "Select difficulty"
+         DB    0
+SzLvlH   ASC   "HARD"
+         DB    0
+SzLvlM   ASC   "MEDIUM"
+         DB    0
+SzLvlE   ASC   "EASY"
+         DB    0
+
 SzScore  ASC   "               Score: "
          DB    0
 SzHitKey asc   "         Hit a Key to resume"
